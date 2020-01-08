@@ -1,4 +1,5 @@
 import os
+
 file = 'warpeace_input.txt'
 assert os.path.exists(file), 'Please download warpeace_input.txt by yourself and place in data/linux directory.'
 

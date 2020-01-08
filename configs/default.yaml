@@ -1,0 +1,19 @@
+activation_config:
+  bit_width: 8
+  narrow_range: True
+  quant_type: 'QuantType.FP'
+  scaling_impl_type: 'PARAMETER'
+  scaling_stats_op: 'MAX'
+  scaling_min_val: 0.0000000002
+weight_config:
+  weight_bit_width : 8
+  weight_quant_type : 'QuantType.FP'
+  weight_narrow_range : True
+  weight_scaling_impl_type : 'STATS'
+  weight_scaling_stats_op : 'MAX'
+  weight_scaling_min_val : 0.0000000002
+  bias_bit_width : 8
+  bias_quant_type : 'QuantType.FP'
+  bias_narrow_range : False
+  compute_output_scale : False
+  compute_output_bit_width : False

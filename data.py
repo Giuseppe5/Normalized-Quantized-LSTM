@@ -3,6 +3,7 @@ import torch
 
 from collections import Counter
 
+
 class Dictionary(object):
     def __init__(self):
         self.word2idx = {}
@@ -26,7 +27,7 @@ class Dictionary(object):
 class Corpus(object):
     def __init__(self, path):
         self.dictionary = Dictionary()
-        if path.split('/')[1] in [ 'warpeace', 'text8']:
+        if path.split('\\')[1] in ['warpeace', 'text8']:
             self.train = self.tokenizeChar(os.path.join(path, 'train.txt'))
             self.valid = self.tokenizeChar(os.path.join(path, 'valid.txt'))
             self.test = self.tokenizeChar(os.path.join(path, 'test.txt'))
@@ -63,7 +64,7 @@ class Corpus(object):
         """Tokenizes a text file for a character language model."""
         assert os.path.exists(path)
         data = open(path, 'rb').read()
-        chars =  list(set(data))
+        chars = list(set(data))
         data_size, vocab_size = len(data), len(chars)
         # Add chars to the dictionary
         for char in chars:

@@ -1,4 +1,5 @@
 import os
+
 file = 'text8'
 assert os.path.exists(file), 'Please download text8.txt by yourself and place in data/text8 directory.'
 

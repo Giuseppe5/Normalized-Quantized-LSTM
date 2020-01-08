@@ -23,7 +23,7 @@ parser.add_argument('--lr', type=float, default=0.002,
                     help='initial learning rate')
 parser.add_argument('--final_lr', type=float, default=0.001)
 parser.add_argument('--clip', type=float, default=1,
-                    help='gradient clipping') ############## it seems that there is no clipping
+                    help='gradient clipping')  ############## it seems that there is no clipping
 parser.add_argument('--epochs', type=int, default=200,
                     help='upper epoch limit')
 parser.add_argument('--batchsize', type=int, default=100, metavar='N',
@@ -38,21 +38,21 @@ parser.add_argument('--nonmono', type=int, default=5,
 parser.add_argument('--log-interval', type=int, default=200, metavar='N',
                     help='report interval')
 randomhash = ''.join(str(time.time()).split('.'))
-parser.add_argument('--optimizer', type=str,  default='adam',
+parser.add_argument('--optimizer', type=str, default='adam',
                     help='optimizer to use (sgd, adam)')
 parser.add_argument('--norm', type=str, default='')
 parser.add_argument('--method', type=str, default='')
 parser.add_argument('--pmnist', default=False, action='store_true', help='If set, it uses permutated-MNIST dataset')
-parser.add_argument('--shared', default=False, action='store_true', help='If set, it uses shared mean and var stats for all time steps')
+parser.add_argument('--shared', default=False, action='store_true',
+                    help='If set, it uses shared mean and var stats for all time steps')
 parser.add_argument('--quantize', default=False, action='store_true')
-
 
 args = parser.parse_args()
 # args.quantize = True
 os.makedirs('checkpoints', exist_ok=True)
-savename = 'checkpoints/new_mnist_' + str(args.nhid) +'_lr_' + str(args.lr) + '_finallr_' + \
+savename = 'checkpoints/new_mnist_' + str(args.nhid) + '_lr_' + str(args.lr) + '_finallr_' + \
            str(args.final_lr) + '_clip_' + str(args.clip) + '_bsz_' + str(args.batchsize) + \
-    '_optimizer_' + args.optimizer
+           '_optimizer_' + args.optimizer
 tmp = args.method if args.quantize else ''
 savename += '_' + tmp
 tmp = args.norm if args.norm else ''
@@ -60,12 +60,10 @@ savename += '_' + tmp
 tmp = '_perm' if args.pmnist else ''
 args.save = savename + tmp
 
-
 np.random.seed(args.seed)
 torch.manual_seed(args.seed)
 if torch.cuda.is_available():
     torch.cuda.manual_seed(args.seed)
-
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -77,7 +75,6 @@ else:
 
 train_loader, valid_loader = get_train_valid_loader(args.data, args.batchsize, perm, shuffle=True)
 test_loader = get_test_loader(args.data, args.batchsize, perm)
-
 
 model = model.mnistModel(args.model, args.ninp, args.nhid, args.nlayers, args, quantize=args.quantize)
 model.to(device)
@@ -101,14 +98,10 @@ if args.optimizer == 'sgd':
 if args.optimizer == 'adam':
     optimizer = torch.optim.Adam(params, lr=args.lr, weight_decay=args.wdecay)
 
-
 # Learning Rate
 lr = args.lr
 final_lr = args.final_lr
 args.lr_decay = (final_lr / lr) ** (1. / args.epochs)
 
-
-
-trainer = Trainer(optimizer, criterion,params_invariant, args, )
+trainer = Trainer(optimizer, criterion, params_invariant, args, )
 trainer.train(model, train_loader, valid_loader, test_loader)
-
