@@ -27,7 +27,7 @@ class Dictionary(object):
 class Corpus(object):
     def __init__(self, path):
         self.dictionary = Dictionary()
-        if path.split('\\')[1] in ['warpeace', 'text8']:
+        if path.split('/')[1] in ['warpeace', 'text8']:
             self.train = self.tokenizeChar(os.path.join(path, 'train.txt'))
             self.valid = self.tokenizeChar(os.path.join(path, 'valid.txt'))
             self.test = self.tokenizeChar(os.path.join(path, 'test.txt'))
