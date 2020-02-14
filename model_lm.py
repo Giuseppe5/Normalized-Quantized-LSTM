@@ -434,7 +434,7 @@ class RNNModel(nn.Module):
         self.norm = args.norm
         assert rnn_type in ['LSTM', 'QRNN', 'GRU'], 'RNN type is not supported'
         self.rnns = [QuantLSTMLayer(ninp, nhid, weight_config=weight_config, activation_config=activation_config,
-                                   layer_norm=self.norm)]
+                                   layer_norm='decompose')]
 
         # if rnn_type == 'LSTM':
         #     if quantize or args.norm:
