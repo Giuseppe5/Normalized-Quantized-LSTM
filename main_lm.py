@@ -81,7 +81,7 @@ with open(args.config, 'r') as stream:
     config = yaml.safe_load(stream)
 args.quantize = True
 os.makedirs('checkpoints', exist_ok=True)
-dataset = args.data.split('\\')[1]
+dataset = args.data.split('/')[1]
 need_quantized = '' if args.quantize else '_no_quantized'
 keeplrlr = 'keeplr_' if args.keep_lr else ''
 args.savefile = 'new_' + dataset + '_' + args.norm + 'norm_' + keeplrlr + args.method + '_' + \
@@ -117,7 +117,7 @@ else:
 
 def model_save(fn):
     with open(fn, 'wb') as f:
-        torch.save([model, criterion, optimizer], f)
+        torch.save([model.state_dict(), criterion, optimizer], f)
 
 
 def model_load(fn):
