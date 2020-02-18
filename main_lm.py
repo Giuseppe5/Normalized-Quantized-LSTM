@@ -204,25 +204,28 @@ def evaluate(data_source, batch_size=10):
         hidden = repackage_hidden(hidden)
     return total_loss.item() / len(data_source)
 
-
+LSTMState = namedtuple('LSTMState', ['hx', 'cx'])
 def train(train_data):
     # Turn on training mode which enables dropout.
     if args.model == 'QRNN': model.reset()
     total_loss = 0
     return_loss = 0
     start_time = time.time()
-    hidden = model.init_hidden(args.batch_size, args.cuda)
     batch, i = 0, 0
     while i < train_data.size(0) - 1 - 1:
         seq_len = args.bptt
         model.train()
         data, targets = get_batch(train_data, i, args, seq_len=seq_len)
-        hidden = repackage_hidden(hidden)
+        # hidden = repackage_hidden(hidden)#
+        hidden_cx, hidden_hx = model.hidden_init  # TODO broadcast to correct shape according to args.batch_size
+        cx = hidden_cx.expand(args.batch_size, args.nhid)
+        hx = hidden_hx.expand(args.batch_size, args.nhid)
+        hidden = LSTMState(hx, cx)
         optimizer.zero_grad()
 
         output, hidden, rnn_hs, dropped_rnn_hs = model(data, hidden, optimizer, return_h=True)
-        if args.no_warm_start:
-            hidden = model.init_hidden(args.batch_size)
+        # if args.no_warm_start:
+        #     hidden = model.init_hidden(args.batch_size)
         raw_loss = criterion(output, targets)
 
         loss = raw_loss
