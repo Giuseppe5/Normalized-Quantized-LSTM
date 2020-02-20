@@ -223,6 +223,7 @@ def train(train_data):
         hidden_hx = model.rnns[0].hidden_init_hx
         cx = hidden_cx.expand(args.batch_size, args.nhid)
         hx = hidden_hx.expand(args.batch_size, args.nhid)
+
         hidden = [LSTMState(hx, cx)]
 
         output, hidden, rnn_hs, dropped_rnn_hs = model(data, hidden, optimizer, return_h=True)

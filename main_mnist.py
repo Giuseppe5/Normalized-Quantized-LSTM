@@ -7,6 +7,7 @@ import os
 import model_mnist as model
 from trainer import Trainer
 from dataloader import get_train_valid_loader, get_test_loader
+import yaml
 
 parser = argparse.ArgumentParser(description='MNIST task')
 parser.add_argument('--data', type=str, default='data/mnist/',
@@ -46,6 +47,7 @@ parser.add_argument('--pmnist', default=False, action='store_true', help='If set
 parser.add_argument('--shared', default=False, action='store_true',
                     help='If set, it uses shared mean and var stats for all time steps')
 parser.add_argument('--quantize', default=False, action='store_true')
+parser.add_argument('--config', default='configs/default.yaml', help='Configuration file for quantization')
 
 args = parser.parse_args()
 # args.quantize = True
@@ -76,7 +78,10 @@ else:
 train_loader, valid_loader = get_train_valid_loader(args.data, args.batchsize, perm, shuffle=True)
 test_loader = get_test_loader(args.data, args.batchsize, perm)
 
-model = model.mnistModel(args.model, args.ninp, args.nhid, args.nlayers, args, quantize=args.quantize)
+with open(args.config, 'r') as stream:
+    config = yaml.safe_load(stream)
+model = model.mnistModel(args.model, args.ninp, args.nhid, args.nlayers, args,
+                         config['weight_config'], config['activation_config'], quantize=args.quantize)
 model.to(device)
 criterion = nn.CrossEntropyLoss()
 criterion.to(device)
@@ -102,6 +107,7 @@ if args.optimizer == 'adam':
 lr = args.lr
 final_lr = args.final_lr
 args.lr_decay = (final_lr / lr) ** (1. / args.epochs)
+if __name__=='__main__':
 
-trainer = Trainer(optimizer, criterion, params_invariant, args, )
-trainer.train(model, train_loader, valid_loader, test_loader)
+    trainer = Trainer(optimizer, criterion, params_invariant, args, )
+    trainer.train(model, train_loader, valid_loader, test_loader)

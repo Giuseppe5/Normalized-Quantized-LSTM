@@ -4,7 +4,8 @@ from torch import nn
 from torch.nn import Parameter
 import torch.nn.functional as F
 import numpy as np
-
+from brevitas.nn.quant_lstmlayer import QuantLSTMLayer, LSTMState
+import yaml
 
 class SeparatedBatchNorm1d(nn.Module):
     """
@@ -402,12 +403,13 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 class mnistModel(nn.Module):
     """Container module with an encoder, a recurrent module, and a decoder."""
 
-    def __init__(self, rnn_type, ninp, nhid, nlayers, args, quantize=False):
+    def __init__(self, rnn_type, ninp, nhid, nlayers, args, weight_config, activation_config, quantize=False):
         super(mnistModel, self).__init__()
         self.args = args
         self.quantize = quantize
         self.norm = args.norm
-        self.rnns = [LSTM_quantized(ninp, nhid, self.norm, args, num_layers=1, dropout=0)]
+        self.rnns = [QuantLSTMLayer(ninp, nhid, weight_config=weight_config, activation_config=activation_config,
+                                   layer_norm='decompose')]
         self.rnns = torch.nn.ModuleList(self.rnns)
         self.decoder = nn.Linear(nhid, 10)  # there are as a total of 10 digits
         self.init_weights()
@@ -434,9 +436,14 @@ class mnistModel(nn.Module):
             rnn.optim_grad(optimizer)
 
     def forward(self, input, optimizer, return_h=False):
-        if self.quantize:
-            self.quantize_layers(optimizer)
-        _, output = self.rnns[0](input)
-        result = output[0].view(-1, output[0].size(2))
-        result = self.decoder(result)
+        # if self.quantize:
+        #     self.quantize_layers(optimizer)
+        hidden_cx = self.rnns[0].hidden_init_cx
+        hidden_hx = self.rnns[0].hidden_init_hx
+        cx = hidden_cx.expand(input.shape[1], self.nhid)
+        hx = hidden_hx.expand(input.shape[1], self.nhid)
+        hidden = LSTMState(cx, hx)
+        _, output = self.rnns[0](input, hidden)
+        # result = output[0].view(-1, output[0].size(2))
+        result = self.decoder(output[0])
         return result
