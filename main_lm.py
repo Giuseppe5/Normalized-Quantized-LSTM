@@ -204,6 +204,7 @@ def evaluate(data_source, batch_size=10):
         hidden = repackage_hidden(hidden)
     return total_loss.item() / len(data_source)
 
+from collections import namedtuple
 LSTMState = namedtuple('LSTMState', ['hx', 'cx'])
 def train(train_data):
     # Turn on training mode which enables dropout.
@@ -217,11 +218,12 @@ def train(train_data):
         model.train()
         data, targets = get_batch(train_data, i, args, seq_len=seq_len)
         # hidden = repackage_hidden(hidden)#
-        hidden_cx, hidden_hx = model.hidden_init  # TODO broadcast to correct shape according to args.batch_size
+        optimizer.zero_grad()
+        hidden_cx = model.rnns[0].hidden_init_cx
+        hidden_hx = model.rnns[0].hidden_init_hx
         cx = hidden_cx.expand(args.batch_size, args.nhid)
         hx = hidden_hx.expand(args.batch_size, args.nhid)
-        hidden = LSTMState(hx, cx)
-        optimizer.zero_grad()
+        hidden = [LSTMState(hx, cx)]
 
         output, hidden, rnn_hs, dropped_rnn_hs = model(data, hidden, optimizer, return_h=True)
         # if args.no_warm_start:
@@ -229,14 +231,16 @@ def train(train_data):
         raw_loss = criterion(output, targets)
 
         loss = raw_loss
+        temp_time = time.time()
         loss.backward()
-
+        print(time.time() - temp_time)
+        temp_time = time.time()
         # `clip_grad_norm` helps prevent the exploding gradient problem in RNNs / LSTMs.
         if args.clip: torch.nn.utils.clip_grad_norm_(params_invariant, args.clip)
         # if args.quantize:
         #     model.optim_grad(optimizer)
         optimizer.step()
-
+        print(time.time()-temp_time)
         total_loss += raw_loss.data
         return_loss += raw_loss.data
         if batch % args.log_interval == 0 and batch > 0:

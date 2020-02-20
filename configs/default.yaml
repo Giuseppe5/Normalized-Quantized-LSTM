@@ -1,7 +1,7 @@
 activation_config:
   bit_width: 1
   narrow_range: False
-  quant_type: 'QuantType.INT'
+  quant_type: 'QuantType.FP'
   scaling_impl_type: 'STATS'
   scaling_stats_op: 'MAX'
   scaling_min_val: null
@@ -10,5 +10,5 @@ weight_config:
   weight_quant_type : 'QuantType.BINARY'
   weight_narrow_range : False
   weight_scaling_impl_type : 'STATS'
-  weight_scaling_stats_op : 'MAX'
+  weight_scaling_stats_op : 'AVE'
   weight_scaling_min_val : null
