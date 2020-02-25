@@ -293,23 +293,23 @@ class LSTM_quantized_cell(nn.Module):
             ih, fh, ah, oh = torch.split(pre_hh, self.hidden_size, dim=1)
             ib, fb, ab, ob = torch.split(self.bias_ih_l0, self.hidden_size, dim=0)
             if not first:
-                i = self.tensorbatchnorm(ii + ih)
-                f = self.tensorbatchnorm(fi + fh)
-                a = self.tensorbatchnorm(ai + ah)
-                o = self.tensorbatchnorm(oi + oh)
+                i = self.tensorbatchnorm_i(ii + ih)
+                f = self.tensorbatchnorm_f(fi + fh)
+                a = self.tensorbatchnorm_a(ai + ah)
+                o = self.tensorbatchnorm_o(oi + oh)
             else:
-                i = functional_tensor_batch_norm(ii+ih, self.layernorm_i.running_mean.detach(),
-                                                      self.layernorm_i.running_var.detach(), self.layernorm_i.eps,
-                                                      self.layernorm_i.weight)
-                f = functional_tensor_batch_norm(fi+fh, self.layernorm_f.running_mean.detach(),
-                                                      self.layernorm_f.running_var.detach(), self.layernorm_f.eps,
-                                                      self.layernorm_f.weight)
-                a = functional_tensor_batch_norm(ai+ah, self.layernorm_a.running_mean.detach().detach(),
-                                                      self.layernorm_a.running_var.detach(), self.layernorm_a.eps,
-                                                      self.layernorm_a.weight)
-                o = functional_tensor_batch_norm(oi+oh, self.layernorm_o.running_mean.detach(),
-                                                      self.layernorm_o.running_var.detach(), self.layernorm_o.eps,
-                                                      self.layernorm_o.weight)
+                i = functional_tensor_batch_norm(ii+ih, self.tensorbatchnorm_i.running_mean.detach(),
+                                                      self.tensorbatchnorm_i.running_var.detach(), self.tensorbatchnorm_i.eps,
+                                                      self.tensorbatchnorm_i.weight)
+                f = functional_tensor_batch_norm(fi+fh, self.tensorbatchnorm_f.running_mean.detach(),
+                                                      self.tensorbatchnorm_f.running_var.detach(), self.tensorbatchnorm_f.eps,
+                                                      self.tensorbatchnorm_f.weight)
+                a = functional_tensor_batch_norm(ai+ah, self.tensorbatchnorm_a.running_mean.detach().detach(),
+                                                      self.tensorbatchnorm_a.running_var.detach(), self.tensorbatchnorm_a.eps,
+                                                      self.tensorbatchnorm_a.weight)
+                o = functional_tensor_batch_norm(oi+oh, self.tensorbatchnorm_o.running_mean.detach(),
+                                                      self.tensorbatchnorm_o.running_var.detach(), self.tensorbatchnorm_o.eps,
+                                                      self.tensorbatchnorm_o.weight)
             i, f, a, o = i+ib, f+fb, a+ab, o+ob
         if self.norm == 'layer':
             ii, fi, ai, oi = torch.split(pre_ih, self.hidden_size, dim=1)
