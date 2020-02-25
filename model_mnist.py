@@ -195,6 +195,9 @@ class LSTM_quantized_cell(nn.Module):
         elif self.norm == 'tensorbatch':
             self.tensorbatchnorm_i, self.tensorbatchnorm_f, self.tensorbatchnorm_a, self.tensorbatchnorm_o = \
                 TensorBatchNorm(), TensorBatchNorm(), TensorBatchNorm(), TensorBatchNorm()
+            self.reset_parameters()
+            self.weight_ih_l0.data.copy_(self.weight_ih_l0_full_precision.data)
+            self.weight_hh_l0.data.copy_(self.weight_hh_l0_full_precision.data)
         else:
             self.reset_parameters()
             self.weight_ih_l0.data.copy_(self.weight_ih_l0_full_precision.data)
@@ -432,8 +435,8 @@ class LSTM_quantized(nn.Module):
     def _forward_rnn(cell, x, hidden):
         max_time = x.shape[0]
         outputs = []
-        first = False
         for time in range(max_time):
+            first = False
             if time == 0:
                 first = True
             _, hidden = cell(x[time], hidden, time, first)

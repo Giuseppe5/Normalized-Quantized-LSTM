@@ -108,7 +108,7 @@ final_lr = args.final_lr
 args.lr_decay = (final_lr / lr) ** (1. / args.epochs)
 
 
-
-trainer = Trainer(optimizer, criterion,params_invariant, args, )
-trainer.train(model, train_loader, valid_loader, test_loader)
+if __name__ == '__main__':
+    trainer = Trainer(optimizer, criterion,params_invariant, args, )
+    trainer.train(model, train_loader, valid_loader, test_loader)
 
