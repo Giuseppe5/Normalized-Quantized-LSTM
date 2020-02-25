@@ -99,23 +99,23 @@ class WeightNorm(nn.Module):
 
 
 class TensorBatchNorm(nn.Module):
-    def __init__(self, eps=1e-5, momentum=0.1):
+    def __init__(self, hidden, eps=1e-5, momentum=0.1):
         super(TensorBatchNorm, self).__init__()
-        self.register_buffer('running_mean', torch.zeros(1))
-        self.register_buffer('running_var', torch.ones(1))
+        self.register_buffer('running_mean', torch.zeros(hidden))
+        self.register_buffer('running_var', torch.ones(hidden))
         self.eps = eps
         self.momentum = momentum
-        self.weight = nn.Parameter(torch.tensor(1.0), requires_grad=True)
+        self.weight = nn.Parameter(torch.ones(hidden), requires_grad=True)
         self.running_mean.zero_()
         self.running_var.fill_(1)
 
     def forward(self, input: torch.Tensor):
         if self.training:
-            mean = input.mean()
-            unbias_var = input.var(unbiased=True)
+            mean = input.mean(0)
+            unbias_var = input.var(0, unbiased=True)
             self.running_mean = (1 - self.momentum) * self.running_mean + mean.detach() * self.momentum
             self.running_var = (1 - self.momentum) * self.running_var + unbias_var.detach() * self.momentum
-            biased_var = input.var(unbiased=False)
+            biased_var = input.var(0, unbiased=False)
             output = functional_tensor_batch_norm(input, mean, biased_var, self.eps, self.weight)
             # inv_std = 1/(biased_var + self.eps).pow(0.5)
             # output = (input-mean) * inv_std * self.weight
@@ -193,8 +193,8 @@ class LSTM_quantized_cell(nn.Module):
                 self.reset_parameters()
                 self.reset_BN_parameters()
         elif self.norm == 'tensorbatch':
-            self.tensorbatchnorm_i, self.tensorbatchnorm_f, self.tensorbatchnorm_a, self.tensorbatchnorm_o = \
-                TensorBatchNorm(), TensorBatchNorm(), TensorBatchNorm(), TensorBatchNorm()
+            self.tensorbatchnorm_i, self.tensorbatchnorm_h = \
+                TensorBatchNorm(4*hidden_size), TensorBatchNorm(4*hidden_size)
             self.reset_parameters()
             self.weight_ih_l0.data.copy_(self.weight_ih_l0_full_precision.data)
             self.weight_hh_l0.data.copy_(self.weight_hh_l0_full_precision.data)
@@ -292,28 +292,19 @@ class LSTM_quantized_cell(nn.Module):
         if self.norm == 'tensorbatch':
             pre_ih = F.linear(x, self.weight_ih_l0, )
             pre_hh = F.linear(h, self.weight_hh_l0, )
-            ii, fi, ai, oi = torch.split(pre_ih, self.hidden_size, dim=1)
-            ih, fh, ah, oh = torch.split(pre_hh, self.hidden_size, dim=1)
-            ib, fb, ab, ob = torch.split(self.bias_ih_l0, self.hidden_size, dim=0)
             if not first:
-                i = self.tensorbatchnorm_i(ii + ih)
-                f = self.tensorbatchnorm_f(fi + fh)
-                a = self.tensorbatchnorm_a(ai + ah)
-                o = self.tensorbatchnorm_o(oi + oh)
+                pre_ih = self.tensorbatchnorm_i(pre_ih)
+                pre_hh = self.tensorbatchnorm_h(pre_hh)
+
             else:
-                i = functional_tensor_batch_norm(ii+ih, self.tensorbatchnorm_i.running_mean.detach(),
-                                                      self.tensorbatchnorm_i.running_var.detach(), self.tensorbatchnorm_i.eps,
+                pre_ih = functional_tensor_batch_norm(pre_ih, self.tensorbatchnorm_i.running_mean.data(),
+                                                      self.tensorbatchnorm_i.running_var.data(), self.tensorbatchnorm_i.eps,
                                                       self.tensorbatchnorm_i.weight)
-                f = functional_tensor_batch_norm(fi+fh, self.tensorbatchnorm_f.running_mean.detach(),
-                                                      self.tensorbatchnorm_f.running_var.detach(), self.tensorbatchnorm_f.eps,
-                                                      self.tensorbatchnorm_f.weight)
-                a = functional_tensor_batch_norm(ai+ah, self.tensorbatchnorm_a.running_mean.detach().detach(),
-                                                      self.tensorbatchnorm_a.running_var.detach(), self.tensorbatchnorm_a.eps,
-                                                      self.tensorbatchnorm_a.weight)
-                o = functional_tensor_batch_norm(oi+oh, self.tensorbatchnorm_o.running_mean.detach(),
-                                                      self.tensorbatchnorm_o.running_var.detach(), self.tensorbatchnorm_o.eps,
-                                                      self.tensorbatchnorm_o.weight)
-            i, f, a, o = i+ib, f+fb, a+ab, o+ob
+                pre_hh = functional_tensor_batch_norm(pre_hh, self.tensorbatchnorm_h.running_mean.data(),
+                                                      self.tensorbatchnorm_h.running_var.data(), self.tensorbatchnorm_h.eps,
+                                                      self.tensorbatchnorm_h.weight)
+
+            i, f, a, o = torch.split(pre_ih + pre_hh + self.bias_ih_l0, self.hidden_size, dim=1)
         if self.norm == 'layer':
             ii, fi, ai, oi = torch.split(pre_ih, self.hidden_size, dim=1)
             ih, fh, ah, oh = torch.split(pre_hh, self.hidden_size, dim=1)
