@@ -100,6 +100,7 @@ class WeightNorm(nn.Module):
 
 class TensorBatchNorm(nn.Module):
     def __init__(self, eps=1e-5, momentum=0.1):
+        super(TensorBatchNorm, self).__init__()
         self.register_buffer('running_mean', torch.zeros(1))
         self.register_buffer('running_var', torch.ones(1))
         self.eps = eps
@@ -286,8 +287,8 @@ class LSTM_quantized_cell(nn.Module):
                 pre_hh = self.batchnorm_hh(pre_hh, time=time)
             i, f, a, o = torch.split(pre_ih + pre_hh + self.bias_ih_l0, self.hidden_size, dim=1)
         if self.norm == 'tensorbatch':
-            pre_ih = F.linear(x, self.weight_ih, )
-            pre_hh = F.linear(h, self.weight_hh, )
+            pre_ih = F.linear(x, self.weight_ih_l0, )
+            pre_hh = F.linear(h, self.weight_hh_l0, )
             ii, fi, ai, oi = torch.split(pre_ih, self.hidden_size, dim=1)
             ih, fh, ah, oh = torch.split(pre_hh, self.hidden_size, dim=1)
             ib, fb, ab, ob = torch.split(self.bias_ih_l0, self.hidden_size, dim=0)
