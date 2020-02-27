@@ -106,6 +106,7 @@ class TensorBatchNorm(nn.Module):
         self.eps = eps
         self.momentum = momentum
         self.weight = nn.Parameter(torch.ones(hidden), requires_grad=True)
+        # self.bias = nn.Parameter(torch.zeros(hidden), requires_grad=True)
         self.running_mean.zero_()
         self.running_var.fill_(1)
 
@@ -113,12 +114,12 @@ class TensorBatchNorm(nn.Module):
         if self.training:
             mean = input.mean(0)
             unbias_var = input.var(0, unbiased=True)
+            biased_var = input.var(0, unbiased=True)
+
             self.running_mean = (1 - self.momentum) * self.running_mean + mean.detach() * self.momentum
             self.running_var = (1 - self.momentum) * self.running_var + unbias_var.detach() * self.momentum
-            biased_var = input.var(0, unbiased=False)
             output = functional_tensor_batch_norm(input, mean, biased_var, self.eps, self.weight)
-            # inv_std = 1/(biased_var + self.eps).pow(0.5)
-            # output = (input-mean) * inv_std * self.weight
+
             return output
         else:
             output = functional_tensor_batch_norm(input, self.running_mean, self.running_var, self.eps, self.weight)
@@ -193,11 +194,10 @@ class LSTM_quantized_cell(nn.Module):
                 self.reset_parameters()
                 self.reset_BN_parameters()
         elif self.norm == 'tensorbatch':
+            self.reset_parameters()
             self.tensorbatchnorm_i, self.tensorbatchnorm_h = \
                 TensorBatchNorm(4*hidden_size), TensorBatchNorm(4*hidden_size)
-            self.reset_parameters()
-            self.weight_ih_l0.data.copy_(self.weight_ih_l0_full_precision.data)
-            self.weight_hh_l0.data.copy_(self.weight_hh_l0_full_precision.data)
+
         else:
             self.reset_parameters()
             self.weight_ih_l0.data.copy_(self.weight_ih_l0_full_precision.data)
@@ -277,10 +277,9 @@ class LSTM_quantized_cell(nn.Module):
             pre_ih = F.linear(x, self.weight_ih, )
             pre_hh = F.linear(h, self.weight_hh, )
             i, f, a, o = torch.split(pre_ih + pre_hh + self.bias_ih_l0, self.hidden_size, dim=1)
-        if self.norm == 'layer' or self.norm == 'batch' or not self.norm:
+        if self.norm == 'layer' or self.norm == 'batch' or self.norm == 'tensorbatch' or not self.norm:
             pre_ih = F.linear(x, self.weight_ih_l0, )
             pre_hh = F.linear(h, self.weight_hh_l0, )
-            i, f, a, o = torch.split(pre_ih + pre_hh + self.bias_ih_l0, self.hidden_size, dim=1)
         if self.norm == 'batch':
             if self.args.shared:
                 pre_ih = self.batchnorm_ih(pre_ih)
@@ -290,18 +289,17 @@ class LSTM_quantized_cell(nn.Module):
                 pre_hh = self.batchnorm_hh(pre_hh, time=time)
             i, f, a, o = torch.split(pre_ih + pre_hh + self.bias_ih_l0, self.hidden_size, dim=1)
         if self.norm == 'tensorbatch':
-            pre_ih = F.linear(x, self.weight_ih_l0, )
-            pre_hh = F.linear(h, self.weight_hh_l0, )
+
             if not first:
                 pre_ih = self.tensorbatchnorm_i(pre_ih)
                 pre_hh = self.tensorbatchnorm_h(pre_hh)
 
             else:
-                pre_ih = functional_tensor_batch_norm(pre_ih, self.tensorbatchnorm_i.running_mean.data(),
-                                                      self.tensorbatchnorm_i.running_var.data(), self.tensorbatchnorm_i.eps,
+                pre_ih = functional_tensor_batch_norm(pre_ih, self.tensorbatchnorm_i.running_mean.data,
+                                                      self.tensorbatchnorm_i.running_var.data, self.tensorbatchnorm_i.eps,
                                                       self.tensorbatchnorm_i.weight)
-                pre_hh = functional_tensor_batch_norm(pre_hh, self.tensorbatchnorm_h.running_mean.data(),
-                                                      self.tensorbatchnorm_h.running_var.data(), self.tensorbatchnorm_h.eps,
+                pre_hh = functional_tensor_batch_norm(pre_hh, self.tensorbatchnorm_h.running_mean.data,
+                                                      self.tensorbatchnorm_h.running_var.data, self.tensorbatchnorm_h.eps,
                                                       self.tensorbatchnorm_h.weight)
 
             i, f, a, o = torch.split(pre_ih + pre_hh + self.bias_ih_l0, self.hidden_size, dim=1)
@@ -439,9 +437,9 @@ class LSTM_quantized(nn.Module):
     def forward(self, x, hidden=None):
         self.lstm_cell.weight_forward()
 
-        if self.norm == 'layer' or self.norm == 'batch':
-            h, c = (self.h0.repeat(x.shape[1], 1) + self.h0.data.new(x.shape[1], self.hidden_size).normal_(0, 0.1),
-                    self.c0.repeat(x.shape[1], 1) + self.c0.data.new(x.shape[1], self.hidden_size).normal_(0, 0.1))
+        if self.norm == 'layer' or self.norm == 'batch' or self.norm == 'tensorbatch':
+            h, c = (self.h0.repeat(x.shape[1], 1) + self.h0.data.new(x.shape[1], self.hidden_size).normal_(0, 0.10),
+                    self.c0.repeat(x.shape[1], 1) + self.c0.data.new(x.shape[1], self.hidden_size).normal_(0, 0.10))
         else:
             h, c = (self.h0.repeat((x.shape[1], 1)), self.c0.repeat((x.shape[1], 1)))
         hidden = (h, c)
