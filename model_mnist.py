@@ -417,8 +417,8 @@ class LSTM_quantized(nn.Module):
         self.dropout = dropout
         self.num_layers = num_layers
         self.norm = norm
-        self.h0 = Parameter(torch.zeros(self.hidden_size).cuda(), requires_grad=True)
-        self.c0 = Parameter(torch.zeros(self.hidden_size).cuda(), requires_grad=True)
+        self.h0 = Parameter(0.1 * torch.randn(self.hidden_size).cuda(), requires_grad=True)
+        self.c0 = Parameter(0.1 * torch.randn(self.hidden_size).cuda(), requires_grad=True)
 
     @staticmethod
     def _forward_rnn(cell, x, hidden):
@@ -437,7 +437,7 @@ class LSTM_quantized(nn.Module):
     def forward(self, x, hidden=None):
         self.lstm_cell.weight_forward()
 
-        if self.norm == 'layer' or self.norm == 'batch' or self.norm == 'tensorbatch':
+        if self.norm == 'layer' or self.norm == 'batch':
             h, c = (self.h0.repeat(x.shape[1], 1) + self.h0.data.new(x.shape[1], self.hidden_size).normal_(0, 0.10),
                     self.c0.repeat(x.shape[1], 1) + self.c0.data.new(x.shape[1], self.hidden_size).normal_(0, 0.10))
         else:
