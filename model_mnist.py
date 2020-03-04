@@ -98,32 +98,70 @@ class WeightNorm(nn.Module):
         return self.g * v
 
 
-class TensorBatchNorm(nn.Module):
-    def __init__(self, hidden, eps=1e-5, momentum=0.1):
-        super(TensorBatchNorm, self).__init__()
-        self.register_buffer('running_mean', torch.zeros(hidden))
-        self.register_buffer('running_var', torch.ones(hidden))
+class BatchRenormalization2D(nn.Module):
+
+    def __init__(self, num_features, eps=1e-05, momentum=0.01, r_d_max_inc_step=0.0001):
+        super(BatchRenormalization2D, self).__init__()
+
         self.eps = eps
-        self.momentum = momentum
-        self.weight = nn.Parameter(torch.ones(hidden), requires_grad=True)
-        # self.bias = nn.Parameter(torch.zeros(hidden), requires_grad=True)
-        self.running_mean.zero_()
-        self.running_var.fill_(1)
+        self.momentum = torch.tensor((momentum), requires_grad=False)
 
-    def forward(self, input: torch.Tensor):
+        self.gamma = torch.nn.Parameter(torch.ones((1, num_features)), requires_grad=True)
+        self.beta = torch.nn.Parameter(torch.zeros((1, num_features)), requires_grad=True)
+
+        self.running_avg_mean = torch.ones((1, num_features), requires_grad=False)
+        self.running_avg_std = torch.zeros((1, num_features), requires_grad=False)
+
+        self.max_r_max = 3.0
+        self.max_d_max = 5.0
+
+        self.r_max_inc_step = r_d_max_inc_step
+        self.d_max_inc_step = r_d_max_inc_step
+
+        self.r_max = torch.tensor(1.0, requires_grad=False)
+        self.d_max = torch.tensor(0.0, requires_grad=False)
+
+    def forward(self, x):
+
+        device = self.gamma.device
+
+        batch_ch_mean = torch.mean(x, dim=0, keepdim=True).to(device)
+        batch_ch_std = torch.clamp(torch.std(x, dim=0, keepdim=True), self.eps, 1e10).to(device)
+
+        self.running_avg_std = self.running_avg_std.to(device)
+        self.running_avg_mean = self.running_avg_mean.to(device)
+        self.momentum = self.momentum.to(device)
+
+        self.r_max = self.r_max.to(device)
+        self.d_max = self.d_max.to(device)
+
         if self.training:
-            mean = input.mean(0)
-            unbias_var = input.var(0, unbiased=True)
-            biased_var = input.var(0, unbiased=True)
 
-            self.running_mean = (1 - self.momentum) * self.running_mean + mean.detach() * self.momentum
-            self.running_var = (1 - self.momentum) * self.running_var + unbias_var.detach() * self.momentum
-            output = functional_tensor_batch_norm(input, mean, biased_var, self.eps, self.weight)
+            r = torch.clamp(batch_ch_std / self.running_avg_std, 1.0 / self.r_max, self.r_max).to(device).data.to(
+                device)
+            d = torch.clamp((batch_ch_mean - self.running_avg_mean) / self.running_avg_std, -self.d_max, self.d_max).to(
+                device).data.to(device)
 
-            return output
+            x = ((x - batch_ch_mean) * r) / batch_ch_std + d
+            x = self.gamma * x + self.beta
+
+            if self.r_max < self.max_r_max:
+                self.r_max += self.r_max_inc_step * x.shape[0]
+
+            if self.d_max < self.max_d_max:
+                self.d_max += self.d_max_inc_step * x.shape[0]
+
         else:
-            output = functional_tensor_batch_norm(input, self.running_mean, self.running_var, self.eps, self.weight)
-            return output
+
+            x = (x - self.running_avg_mean) / self.running_avg_std
+            x = self.gamma * x + self.beta
+
+        self.running_avg_mean = self.running_avg_mean + self.momentum * (
+                    batch_ch_mean.data.to(device) - self.running_avg_mean)
+        self.running_avg_std = self.running_avg_std + self.momentum * (
+                    batch_ch_std.data.to(device) - self.running_avg_std)
+
+        return x
 
 
 def functional_tensor_batch_norm(input: torch.Tensor, mean: torch.Tensor, var: torch.Tensor, eps: float,
@@ -193,12 +231,12 @@ class LSTM_quantized_cell(nn.Module):
                 self.batchnorm_c = SeparatedBatchNorm1d(num_features=hidden_size, max_length=max_length)
                 self.reset_parameters()
                 self.reset_BN_parameters()
-        elif self.norm == 'tensorbatch':
+        elif self.norm == 'batchrenorm':
             self.reset_parameters()
-            self.tensorbatchnorm_i, self.tensorbatchnorm_h = \
-                TensorBatchNorm(4*hidden_size), TensorBatchNorm(4*hidden_size)
-            self.weight_ih_l0.data.copy_(self.weight_ih_l0_full_precision.data)
-            self.weight_hh_l0.data.copy_(self.weight_hh_l0_full_precision.data)
+            self.batchrenorm_i, self.batchrenorm_h = \
+                BatchRenormalization2D(4 * hidden_size), BatchRenormalization2D(4 * hidden_size)
+            # self.weight_ih_l0.data.copy_(self.weight_ih_l0_full_precision.data)
+            # self.weight_hh_l0.data.copy_(self.weight_hh_l0_full_precision.data)
         else:
             self.reset_parameters()
             self.weight_ih_l0.data.copy_(self.weight_ih_l0_full_precision.data)
@@ -278,9 +316,10 @@ class LSTM_quantized_cell(nn.Module):
             pre_ih = F.linear(x, self.weight_ih, )
             pre_hh = F.linear(h, self.weight_hh, )
             i, f, a, o = torch.split(pre_ih + pre_hh + self.bias_ih_l0, self.hidden_size, dim=1)
-        if self.norm == 'layer' or self.norm == 'batch' or self.norm == 'tensorbatch' or not self.norm:
+        if self.norm == 'layer' or self.norm == 'batch' or self.norm == 'batchrenorm' or not self.norm:
             pre_ih = F.linear(x, self.weight_ih_l0, )
             pre_hh = F.linear(h, self.weight_hh_l0, )
+            i, f, a, o = torch.split(pre_ih + pre_hh + self.bias_ih_l0, self.hidden_size, dim=1)
         if self.norm == 'batch':
             if self.args.shared:
                 pre_ih = self.batchnorm_ih(pre_ih)
@@ -289,19 +328,10 @@ class LSTM_quantized_cell(nn.Module):
                 pre_ih = self.batchnorm_ih(pre_ih, time=time)
                 pre_hh = self.batchnorm_hh(pre_hh, time=time)
             i, f, a, o = torch.split(pre_ih + pre_hh + self.bias_ih_l0, self.hidden_size, dim=1)
-        if self.norm == 'tensorbatch':
+        if self.norm == 'batchrenorm':
 
-            if not first:
-                pre_ih = self.tensorbatchnorm_i(pre_ih)
-                pre_hh = self.tensorbatchnorm_h(pre_hh)
-
-            else:
-                pre_ih = functional_tensor_batch_norm(pre_ih, self.tensorbatchnorm_i.running_mean.data,
-                                                      self.tensorbatchnorm_i.running_var.data, self.tensorbatchnorm_i.eps,
-                                                      self.tensorbatchnorm_i.weight)
-                pre_hh = functional_tensor_batch_norm(pre_hh, self.tensorbatchnorm_h.running_mean.data,
-                                                      self.tensorbatchnorm_h.running_var.data, self.tensorbatchnorm_h.eps,
-                                                      self.tensorbatchnorm_h.weight)
+            pre_ih = self.batchrenorm_i(pre_ih)
+            pre_hh = self.batchrenorm_h(pre_hh)
 
             i, f, a, o = torch.split(pre_ih + pre_hh + self.bias_ih_l0, self.hidden_size, dim=1)
         if self.norm == 'layer':
@@ -427,8 +457,8 @@ class LSTM_quantized(nn.Module):
         outputs = []
         for time in range(max_time):
             first = False
-            if time == 0:
-                first = True
+            # if time == 0:
+            #     first = True
             _, hidden = cell(x[time], hidden, time, first)
             outputs.append(hidden[0])
         h = hidden[0].unsqueeze(0)
@@ -438,7 +468,7 @@ class LSTM_quantized(nn.Module):
     def forward(self, x, hidden=None):
         self.lstm_cell.weight_forward()
 
-        if self.norm == 'layer' or self.norm == 'batch' or self.norm=='tensorbatch':
+        if self.norm == 'layer' or self.norm == 'batch' or self.norm == 'batchrenorm':
             h, c = (self.h0.repeat(x.shape[1], 1) + self.h0.data.new(x.shape[1], self.hidden_size).normal_(0, 0.10),
                     self.c0.repeat(x.shape[1], 1) + self.c0.data.new(x.shape[1], self.hidden_size).normal_(0, 0.10))
         else:
