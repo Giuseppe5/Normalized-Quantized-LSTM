@@ -98,78 +98,48 @@ class WeightNorm(nn.Module):
         return self.g * v
 
 
-class BatchRenormalization2D(nn.Module):
+class BatchNormalization2D(nn.Module):
 
-    def __init__(self, num_features, eps=1e-05, momentum=0.01, r_d_max_inc_step=0.0001):
-        super(BatchRenormalization2D, self).__init__()
+    def __init__(self, num_features, eps=1e-05, momentum=0.1):
+
+        super(BatchNormalization2D, self).__init__()
 
         self.eps = eps
-        self.momentum = torch.tensor((momentum), requires_grad=False)
+        self.momentum = momentum
 
-        self.gamma = torch.nn.Parameter(torch.ones((1, num_features)), requires_grad=True)
-        self.beta = torch.nn.Parameter(torch.zeros((1, num_features)), requires_grad=True)
+        self.weight = nn.Parameter(0.1 * torch.ones(num_features), requires_grad=True)
+        # self.bias = nn.Parameter(torch.empty(num_features))
 
-        self.running_avg_mean = torch.ones((1, num_features), requires_grad=False)
-        self.running_avg_std = torch.zeros((1, num_features), requires_grad=False)
+        self.register_buffer('running_mean', torch.zeros(num_features))
+        self.register_buffer('running_var', torch.ones(num_features))
 
-        self.max_r_max = 3.0
-        self.max_d_max = 5.0
+    def forward(self, input_):
 
-        self.r_max_inc_step = r_d_max_inc_step
-        self.d_max_inc_step = r_d_max_inc_step
+        batchsize, channels = input_.size()
+        numel = batchsize
+        input_ = input_.permute(1, 0).contiguous().view(channels, numel)
+        sum_ = input_.sum(1)
+        sum_of_square = input_.pow(2).sum(1)
+        mean = sum_ / numel
+        sumvar = sum_of_square - sum_ * mean
 
-        self.r_max = torch.tensor(1.0, requires_grad=False)
-        self.d_max = torch.tensor(0.0, requires_grad=False)
+        self.running_mean = (
+                (1 - self.momentum) * self.running_mean
+                + self.momentum * mean.detach()
+        )
+        unbias_var = sumvar / (numel - 1)
+        self.running_var = (
+                (1 - self.momentum) * self.running_var
+                + self.momentum * unbias_var.detach()
+        )
 
-    def forward(self, x):
+        bias_var = sumvar / numel
+        inv_std = 1 / (bias_var + self.eps).pow(0.5)
+        output = (
+                (input_ - mean.unsqueeze(1)) * inv_std.unsqueeze(1) *
+                self.weight.unsqueeze(1))
 
-        device = self.gamma.device
-
-        batch_ch_mean = torch.mean(x, dim=0, keepdim=True).to(device)
-        batch_ch_std = torch.clamp(torch.std(x, dim=0, keepdim=True), self.eps, 1e10).to(device)
-
-        self.running_avg_std = self.running_avg_std.to(device)
-        self.running_avg_mean = self.running_avg_mean.to(device)
-        self.momentum = self.momentum.to(device)
-
-        self.r_max = self.r_max.to(device)
-        self.d_max = self.d_max.to(device)
-
-        if self.training:
-
-            r = torch.clamp(batch_ch_std / self.running_avg_std, 1.0 / self.r_max, self.r_max).to(device).data.to(
-                device)
-            d = torch.clamp((batch_ch_mean - self.running_avg_mean) / self.running_avg_std, -self.d_max, self.d_max).to(
-                device).data.to(device)
-
-            x = ((x - batch_ch_mean) * r) / batch_ch_std + d
-            x = self.gamma * x + self.beta
-
-            if self.r_max < self.max_r_max:
-                self.r_max += self.r_max_inc_step * x.shape[0]
-
-            if self.d_max < self.max_d_max:
-                self.d_max += self.d_max_inc_step * x.shape[0]
-
-        else:
-
-            x = (x - self.running_avg_mean) / self.running_avg_std
-            x = self.gamma * x + self.beta
-
-        self.running_avg_mean = self.running_avg_mean + self.momentum * (
-                    batch_ch_mean.data.to(device) - self.running_avg_mean)
-        self.running_avg_std = self.running_avg_std + self.momentum * (
-                    batch_ch_std.data.to(device) - self.running_avg_std)
-
-        return x
-
-
-def functional_tensor_batch_norm(input: torch.Tensor, mean: torch.Tensor, var: torch.Tensor, eps: float,
-                                 weight: torch.Tensor):
-    inv_std = 1 / (var + eps).pow(0.5)
-    output = (input - mean) * inv_std * weight
-    return output
-
+        return output.view(channels, batchsize).permute(1, 0).contiguous()
 
 class LSTM_quantized_cell(nn.Module):
 
@@ -234,9 +204,9 @@ class LSTM_quantized_cell(nn.Module):
         elif self.norm == 'batchrenorm':
             self.reset_parameters()
             self.batchrenorm_i, self.batchrenorm_h = \
-                BatchRenormalization2D(4 * hidden_size), BatchRenormalization2D(4 * hidden_size)
-            # self.weight_ih_l0.data.copy_(self.weight_ih_l0_full_precision.data)
-            # self.weight_hh_l0.data.copy_(self.weight_hh_l0_full_precision.data)
+                BatchNormalization2D(4 * hidden_size), BatchNormalization2D(4 * hidden_size)
+            self.weight_ih_l0.data.copy_(self.weight_ih_l0_full_precision.data)
+            self.weight_hh_l0.data.copy_(self.weight_hh_l0_full_precision.data)
         else:
             self.reset_parameters()
             self.weight_ih_l0.data.copy_(self.weight_ih_l0_full_precision.data)
@@ -329,7 +299,6 @@ class LSTM_quantized_cell(nn.Module):
                 pre_hh = self.batchnorm_hh(pre_hh, time=time)
             i, f, a, o = torch.split(pre_ih + pre_hh + self.bias_ih_l0, self.hidden_size, dim=1)
         if self.norm == 'batchrenorm':
-
             pre_ih = self.batchrenorm_i(pre_ih)
             pre_hh = self.batchrenorm_h(pre_hh)
 
