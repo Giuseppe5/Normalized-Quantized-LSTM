@@ -311,16 +311,16 @@ class LSTM_quantized_cell(nn.Module):
                 pre_hh = self.batchnorm_hh(pre_hh, time=time)
             i, f, a, o = torch.split(pre_ih + pre_hh + self.bias_ih_l0, self.hidden_size, dim=1)
         if self.norm == 'batchrenorm':
-            # if not first:
-            pre_ih = self.batchrenorm_i(pre_ih)
-            pre_hh = self.batchrenorm_h(pre_hh)
-            # else:
-            #     pre_ih = functional_bn(pre_ih, self.batchrenorm_i.runnning_mean.detach(),
-            #                            self.batchrenorm_i.running_var.detach(), self.batchrenorm_i.weight,
-            #                            self.batchrenorm_i.eps)
-            #     pre_hh = functional_bn(pre_hh, self.batchrenorm_h.runnning_mean.detach(),
-            #                            self.batchrenorm_h.running_var.detach(), self.batchrenorm_h.weight,
-            #                            self.batchrenorm_h.eps)
+            if not first:
+                pre_ih = self.batchrenorm_i(pre_ih)
+                pre_hh = self.batchrenorm_h(pre_hh)
+            else:
+                pre_ih = functional_bn(pre_ih, self.batchrenorm_i.runnning_mean.detach(),
+                                       self.batchrenorm_i.running_var.detach(), self.batchrenorm_i.weight,
+                                       self.batchrenorm_i.eps)
+                pre_hh = functional_bn(pre_hh, self.batchrenorm_h.runnning_mean.detach(),
+                                       self.batchrenorm_h.running_var.detach(), self.batchrenorm_h.weight,
+                                       self.batchrenorm_h.eps)
 
             i, f, a, o = torch.split(pre_ih + pre_hh + self.bias_ih_l0, self.hidden_size, dim=1)
         if self.norm == 'layer':
@@ -448,7 +448,7 @@ class LSTM_quantized(nn.Module):
             first = False
             if time == 0:
                 first = True
-            _, hidden = cell(x[time], hidden, time)
+            _, hidden = cell(x[time], hidden, time, first)
             outputs.append(hidden[0])
         h = hidden[0].unsqueeze(0)
         c = hidden[1].unsqueeze(0)
