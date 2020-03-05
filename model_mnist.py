@@ -101,7 +101,6 @@ class WeightNorm(nn.Module):
 class BatchNormalization2D(nn.Module):
 
     def __init__(self, num_features, eps=1e-05, momentum=0.1):
-
         super(BatchNormalization2D, self).__init__()
 
         self.eps = eps
@@ -114,32 +113,44 @@ class BatchNormalization2D(nn.Module):
         self.register_buffer('running_var', torch.ones(num_features))
 
     def forward(self, input_):
+        if self.training:
+            batchsize, channels = input_.size()
+            numel = batchsize
+            input_ = input_.permute(1, 0).contiguous().view(channels, numel)
+            sum_ = input_.sum(1)
+            sum_of_square = input_.pow(2).sum(1)
+            mean = sum_ / numel
+            sumvar = sum_of_square - sum_ * mean
 
-        batchsize, channels = input_.size()
-        numel = batchsize
-        input_ = input_.permute(1, 0).contiguous().view(channels, numel)
-        sum_ = input_.sum(1)
-        sum_of_square = input_.pow(2).sum(1)
-        mean = sum_ / numel
-        sumvar = sum_of_square - sum_ * mean
+            self.running_mean = (
+                    (1 - self.momentum) * self.running_mean
+                    + self.momentum * mean.detach()
+            )
+            unbias_var = sumvar / (numel - 1)
+            self.running_var = (
+                    (1 - self.momentum) * self.running_var
+                    + self.momentum * unbias_var.detach()
+            )
 
-        self.running_mean = (
-                (1 - self.momentum) * self.running_mean
-                + self.momentum * mean.detach()
-        )
-        unbias_var = sumvar / (numel - 1)
-        self.running_var = (
-                (1 - self.momentum) * self.running_var
-                + self.momentum * unbias_var.detach()
-        )
+            bias_var = sumvar / numel
+            # inv_std = 1 / (bias_var + self.eps).pow(0.5)
+            # output = (
+            #         (input_ - mean.unsqueeze(1)) * inv_std.unsqueeze(1) *
+            #         self.weight.unsqueeze(1))
+            #
+            # return output.view(channels, batchsize).permute(1, 0).contiguous()
+            return functional_bn(input_, mean, bias_var, self.weight, self.eps)
+        else:
+            return functional_bn(input_, self.running_var, self.running_var, self.weight, self.eps)
 
-        bias_var = sumvar / numel
-        inv_std = 1 / (bias_var + self.eps).pow(0.5)
-        output = (
-                (input_ - mean.unsqueeze(1)) * inv_std.unsqueeze(1) *
-                self.weight.unsqueeze(1))
 
-        return output.view(channels, batchsize).permute(1, 0).contiguous()
+def functional_bn(input_, mean, var, weight, eps):
+    batchsize, channels = input_.size()
+    inv_std = 1 / (var + eps).pow(0.5)
+    output = (input_ - mean.unsqueeze(1)) * inv_std.unsqueeze(1) * weight.unsqueeze(1)
+
+    return output.view(channels, batchsize).permute(1, 0).contiguous()
+
 
 class LSTM_quantized_cell(nn.Module):
 
@@ -425,10 +436,10 @@ class LSTM_quantized(nn.Module):
         max_time = x.shape[0]
         outputs = []
         for time in range(max_time):
-            first = False
+            # first = False
             # if time == 0:
             #     first = True
-            _, hidden = cell(x[time], hidden, time, first)
+            _, hidden = cell(x[time], hidden, time)
             outputs.append(hidden[0])
         h = hidden[0].unsqueeze(0)
         c = hidden[1].unsqueeze(0)
