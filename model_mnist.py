@@ -116,9 +116,9 @@ class BatchNormalization2D(nn.Module):
         if self.training:
             batchsize, channels = input_.size()
             numel = batchsize
-            input_ = input_.permute(1, 0).contiguous().view(channels, numel)
-            sum_ = input_.sum(1)
-            sum_of_square = input_.pow(2).sum(1)
+            # input_ = input_.permute(1, 0).contiguous().view(channels, numel)
+            sum_ = input_.sum(0)
+            sum_of_square = input_.pow(2).sum(0)
             mean = sum_ / numel
             sumvar = sum_of_square - sum_ * mean
 
@@ -141,15 +141,12 @@ class BatchNormalization2D(nn.Module):
             # return output.view(channels, batchsize).permute(1, 0).contiguous()
             return functional_bn(input_, mean, bias_var, self.weight, self.eps)
         else:
-            return functional_bn(input_, self.running_mean, self.running_var, self.weight, self.eps)
+            return functional_bn(input_, self.running_mean.unsqueeze(1), self.running_var.unsqueeze(1), self.weight, self.eps)
 
 
 def functional_bn(input_, mean, var, weight, eps):
-    batchsize, channels = input_.size()
-    input_ = input_.permute(1, 0).contiguous().view(channels, batchsize)
     inv_std = 1 / (var + eps).pow(0.5)
-    output = (input_ - mean) * inv_std * weight
-
+    output = (input_ - mean.unsqueeze(0)) * inv_std.unsqueeze(0) * weight.unsqueeze(0)
     return output
 
 
@@ -315,10 +312,10 @@ class LSTM_quantized_cell(nn.Module):
                 pre_ih = self.batchrenorm_i(pre_ih)
                 pre_hh = self.batchrenorm_h(pre_hh)
             else:
-                pre_ih = functional_bn(pre_ih, self.batchrenorm_i.runnning_mean.detach(),
+                pre_ih = functional_bn(pre_ih, self.batchrenorm_i.running_mean.detach(),
                                        self.batchrenorm_i.running_var.detach(), self.batchrenorm_i.weight,
                                        self.batchrenorm_i.eps)
-                pre_hh = functional_bn(pre_hh, self.batchrenorm_h.runnning_mean.detach(),
+                pre_hh = functional_bn(pre_hh, self.batchrenorm_h.running_mean.detach(),
                                        self.batchrenorm_h.running_var.detach(), self.batchrenorm_h.weight,
                                        self.batchrenorm_h.eps)
 
