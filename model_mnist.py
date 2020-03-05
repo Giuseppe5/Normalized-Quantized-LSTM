@@ -141,15 +141,16 @@ class BatchNormalization2D(nn.Module):
             # return output.view(channels, batchsize).permute(1, 0).contiguous()
             return functional_bn(input_, mean, bias_var, self.weight, self.eps)
         else:
-            return functional_bn(input_, self.running_var, self.running_var, self.weight, self.eps)
+            return functional_bn(input_, self.running_mean, self.running_var, self.weight, self.eps)
 
 
 def functional_bn(input_, mean, var, weight, eps):
     batchsize, channels = input_.size()
+    input_ = input_.permute(1, 0).contiguous().view(channels, batchsize)
     inv_std = 1 / (var + eps).pow(0.5)
-    output = (input_ - mean.unsqueeze(1)) * inv_std.unsqueeze(1) * weight.unsqueeze(1)
+    output = (input_ - mean) * inv_std * weight
 
-    return output.view(channels, batchsize).permute(1, 0).contiguous()
+    return output
 
 
 class LSTM_quantized_cell(nn.Module):
