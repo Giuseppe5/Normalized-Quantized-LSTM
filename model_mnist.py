@@ -141,7 +141,7 @@ class BatchNormalization2D(nn.Module):
             # return output.view(channels, batchsize).permute(1, 0).contiguous()
             return functional_bn(input_, mean, bias_var, self.weight, self.eps)
         else:
-            return functional_bn(input_, self.running_mean.unsqueeze(1), self.running_var.unsqueeze(1), self.weight, self.eps)
+            return functional_bn(input_, self.running_mean, self.running_var, self.weight, self.eps)
 
 
 def functional_bn(input_, mean, var, weight, eps):
