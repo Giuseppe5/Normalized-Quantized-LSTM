@@ -76,11 +76,13 @@ class Trainer(object):
         total_cases = 0
         start_time = time.time()
         model.train()
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        device = "cpu"
         for i, sample in enumerate(train_loader):
             j = i + 1
             images, labels = sample
-            images = images.cuda()
-            labels = labels.cuda()
+            images = images.to(device)
+            labels = labels.to(device)
             images = images.transpose(0, 1)  # seq length, bsz, input = 784, 100, 1
             self._optimizer.zero_grad()
             output = model(images, self._optimizer)
