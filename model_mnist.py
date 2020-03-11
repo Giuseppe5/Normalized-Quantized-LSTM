@@ -18,7 +18,6 @@ class SeparatedBatchNorm1d(nn.Module):
         Most parts are copied from
         torch.nn.modules.batchnorm._BatchNorm.
         """
-
         super(SeparatedBatchNorm1d, self).__init__()
         self.num_features = num_features
         self.max_length = max_length

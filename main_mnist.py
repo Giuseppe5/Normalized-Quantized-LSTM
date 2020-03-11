@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import os
-import model_mnist as model
+import basic_lstm as model
 from trainer import Trainer
 from dataloader import get_train_valid_loader, get_test_loader
 if __name__ == '__main__':
@@ -42,20 +42,19 @@ if __name__ == '__main__':
     parser.add_argument('--optimizer', type=str,  default='adam',
                         help='optimizer to use (sgd, adam)')
     parser.add_argument('--norm', type=str, default='')
-    parser.add_argument('--method', type=str, default='')
     parser.add_argument('--pmnist', default=False, action='store_true', help='If set, it uses permutated-MNIST dataset')
-    parser.add_argument('--shared', default=False, action='store_true', help='If set, it uses shared mean and var stats for all time steps')
-    parser.add_argument('--quantize', default=False, action='store_true')
+    parser.add_argument('--experiment_name', type=str, required=True)
 
 
     args = parser.parse_args()
-    # args.quantize = True
     os.makedirs('checkpoints', exist_ok=True)
-    savename = 'checkpoints/new_mnist_' + str(args.nhid) +'_lr_' + str(args.lr) + '_finallr_' + \
+    full_dir = os.path.join('checkpoints', args.experiment_name)
+    os.makedirs(full_dir, exist_ok=True)
+
+    savename = 'new_mnist_' + str(args.nhid) +'_lr_' + str(args.lr) + '_finallr_' + \
                str(args.final_lr) + '_clip_' + str(args.clip) + '_bsz_' + str(args.batchsize) + \
         '_optimizer_' + args.optimizer
-    tmp = args.method if args.quantize else ''
-    savename += '_' + tmp
+    savename = os.path.join(full_dir, savename)
     tmp = args.norm if args.norm else ''
     savename += '_' + tmp
     tmp = '_perm' if args.pmnist else ''
@@ -80,7 +79,7 @@ if __name__ == '__main__':
     test_loader = get_test_loader(args.data, args.batchsize, perm)
 
 
-    model = model.mnistModel(args.model, args.ninp, args.nhid, args.nlayers, args, quantize=args.quantize)
+    model = model.mnistModel(args.model, args.ninp, args.nhid, args.nlayers, args, quantize=False)
     model.to(device)
     criterion = nn.CrossEntropyLoss()
     criterion.to(device)

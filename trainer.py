@@ -89,8 +89,7 @@ class Trainer(object):
             total_loss += raw_loss.item() * labels.shape[0]
             total_cases += labels.shape[0]
             torch.nn.utils.clip_grad_norm_(self.params_invariant, self.args.clip)
-            if self.args.quantize:
-                model.optim_grad(self._optimizer)
+
             self._optimizer.step()
             if j % 10 == 0 :
                 elapsed = time.time() - start_time
