@@ -77,7 +77,6 @@ class Trainer(object):
         start_time = time.time()
         model.train()
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        device = "cpu"
         for i, sample in enumerate(train_loader):
             j = i + 1
             images, labels = sample

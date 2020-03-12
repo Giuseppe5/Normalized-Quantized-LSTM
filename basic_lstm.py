@@ -6,7 +6,7 @@ import warnings
 from collections import namedtuple
 from typing import List, Tuple
 from torch import Tensor
-from iternorm import IterNorm
+from batchrenorm import BatchRenorm1d
 import numbers
 
 
@@ -15,19 +15,19 @@ class LSTMCell(nn.Module):
         super(LSTMCell, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
-        self.weight_ih = Parameter(torch.randn(4 * hidden_size, input_size))
-        self.weight_hh = Parameter(torch.randn(4 * hidden_size, hidden_size))
-        self.bias_ih = Parameter(torch.randn(4 * hidden_size))
-        self.bias_hh = Parameter(torch.randn(4 * hidden_size))
+        self.weight_ih = Parameter(torch.rand(4 * hidden_size, input_size), requires_grad=True)
+        self.weight_hh = Parameter(torch.rand(4 * hidden_size, hidden_size), requires_grad=True)
+        self.bias_ih = Parameter(torch.rand(4 * hidden_size), requires_grad=True)
+        self.bias_hh = Parameter(torch.rand(4 * hidden_size), requires_grad=True)
 
-        self.bn_i = IterNorm(4 * hidden_size, num_groups=10, dim=2, T=10)
-        self.bn_h = IterNorm(4 * hidden_size, num_groups=10, dim=2, T=10)
+        self.bn_i = BatchRenorm1d(4 * hidden_size)
+        self.bn_h = BatchRenorm1d(4 * hidden_size)
 
-    def forward(self, input, state):
+    def forward(self, input, state, first):
         # type: (Tensor, Tuple[Tensor, Tensor]) -> Tuple[Tensor, Tuple[Tensor, Tensor]]
         hx, cx = state
-        gates = (self.bn_i(torch.mm(input, self.weight_ih.t())) + self.bias_ih +
-                 self.bn_h(torch.mm(hx, self.weight_hh.t())) + self.bias_hh)
+        gates = (self.bn_i(torch.mm(input, self.weight_ih.t()), first) + self.bias_ih +
+                 self.bn_h(torch.mm(hx, self.weight_hh.t()), first) + self.bias_hh)
         ingate, forgetgate, cellgate, outgate = gates.chunk(4, 1)
 
         ingate = torch.sigmoid(ingate)
@@ -51,13 +51,16 @@ class LSTMLayer(nn.Module):
     def forward(self, input, state=None):
         # type: (Tensor, Tuple[Tensor, Tensor]) -> Tuple[Tensor, Tuple[Tensor, Tensor]]
 
-        h, c = (self.h0.repeat(input.shape[1], 1) + self.h0.data.new(input.shape[1], self.cell.hidden_size).normal_(0, 0.10),
-                self.c0.repeat(input.shape[1], 1) + self.c0.data.new(input.shape[1], self.cell.hidden_size).normal_(0, 0.10))
+        # h, c = 0.1*torch.randn((input.shape[1], self.cell.hidden_size)), 0.1*torch.randn((input.shape[1], self.cell.hidden_size))
+        h, c = (
+        self.h0.repeat(input.shape[1], 1) + self.h0.data.new(input.shape[1], self.cell.hidden_size).normal_(0, 0.10),
+        self.c0.repeat(input.shape[1], 1) + self.c0.data.new(input.shape[1], self.cell.hidden_size).normal_(0, 0.10))
         state = (h, c)
         # inputs = input.unbind(0)
         outputs = []
         for i in range(len(input)):
-            out, state = self.cell(input[i], state)
+            first = i == len(input)-1
+            out, state = self.cell(input[i], state, first)
             outputs += [out]
         return torch.stack(outputs), state
 
