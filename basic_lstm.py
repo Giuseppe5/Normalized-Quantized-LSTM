@@ -6,7 +6,7 @@ import warnings
 from collections import namedtuple
 from typing import List, Tuple
 from torch import Tensor
-from dbn import DBN
+from iternorm import IterNorm
 import numbers
 
 
@@ -20,8 +20,8 @@ class LSTMCell(nn.Module):
         self.bias_ih = Parameter(torch.randn(4 * hidden_size))
         self.bias_hh = Parameter(torch.randn(4 * hidden_size))
 
-        self.bn_i = DBN(4 * hidden_size)
-        self.bn_h = DBN(4 * hidden_size)
+        self.bn_i = IterNorm(4 * hidden_size, num_groups=10, dim=2, T=10)
+        self.bn_h = IterNorm(4 * hidden_size, num_groups=10, dim=2, T=10)
 
     def forward(self, input, state):
         # type: (Tensor, Tuple[Tensor, Tensor]) -> Tuple[Tensor, Tuple[Tensor, Tensor]]

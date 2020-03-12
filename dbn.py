@@ -95,7 +95,7 @@ class DBN(nn.Module):
             mean = x.mean(0, keepdim=True)
             # self.running_mean = (1. - self.momentum) * self.running_mean + self.momentum * mean
             x_mean = x - mean
-            sigma = x_mean.t().matmul(x_mean) / x.size(0) + 1e-5 * torch.eye(x.size(1), device=x.device)
+            sigma = x_mean.t().matmul(x_mean) / x.size(0) + 1e-3 * torch.eye(x.size(1), device=x.device)
             d, eig, _ = sigma.svd()
             scale = eig.rsqrt()
             u = (scale.diag()).matmul(d.t())
