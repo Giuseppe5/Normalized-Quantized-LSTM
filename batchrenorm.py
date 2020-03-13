@@ -38,13 +38,13 @@ class BatchRenorm(torch.jit.ScriptModule):
 
     @property
     def rmax(self) -> torch.Tensor:
-        return (2 / 35000 * self.num_batches_tracked + 25 / 35).clamp_(
+        return (7.428e-5 * self.num_batches_tracked + 25 / 35).clamp_(
             1.0, 3.0
         )
 
     @property
     def dmax(self) -> torch.Tensor:
-        return (5 / 20000 * self.num_batches_tracked - 25 / 20).clamp_(
+        return (8.33e-5 * self.num_batches_tracked - 25 / 20).clamp_(
             0.0, 5.0
         )
 
