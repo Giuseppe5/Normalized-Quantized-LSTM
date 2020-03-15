@@ -38,13 +38,13 @@ class BatchRenorm(torch.nn.Module):
 
     @property
     def rmax(self) -> torch.Tensor:
-        return (3.714/50000 * self.num_batches_tracked + 25 / 35).clamp_(
+        return (2/35000 * self.num_batches_tracked + 25 / 35).clamp_(
             1.0, 3.0
         )
 
     @property
     def dmax(self) -> torch.Tensor:
-        return (6.125/75000 * self.num_batches_tracked - 25 / 20).clamp_(
+        return (5/20000 * self.num_batches_tracked - 25 / 20).clamp_(
             0.0, 5.0
         )
 
@@ -80,7 +80,8 @@ class BatchRenorm(torch.nn.Module):
             if first:
                 self.num_batches_tracked += 1
         else:
-            x = (x - self.running_mean) / self.running_std
+            inv_std = 1/(self.running_std + self.eps).pow(0.5)
+            x = (x - self.running_mean.unsqueeze(1)) * inv_std.unsqueeze(1)
         if self.affine:
             x = self.weight.unsqueeze(1) * x + self.bias.unsqueeze(1)
 
