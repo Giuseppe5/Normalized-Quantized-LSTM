@@ -31,6 +31,7 @@ class BatchRenorm(torch.nn.Module):
         self.affine = affine
         self.eps = eps
         self.step = 0
+        self.m = torch.distributions.Bernoulli(torch.tensor([0.1]))
         self.momentum = momentum
 
     def _check_input_dim(self, x: torch.Tensor) -> None:
@@ -49,8 +50,8 @@ class BatchRenorm(torch.nn.Module):
         )
 
     def forward(self, x: torch.Tensor, first: bool) -> torch.Tensor:
+        batchsize, channels = x.size()
         if self.training:
-            batchsize, channels = x.size()
             numel = batchsize
             x = x.permute(1, 0).contiguous().view(channels, numel)
             sum_ = x.sum(1)
@@ -76,14 +77,21 @@ class BatchRenorm(torch.nn.Module):
                 / self.running_std.view_as(inv_std)
             ).clamp_(-self.dmax, self.dmax)
 
+            if self.m.sample():
+                r, d = 3.0 * torch.ones(self.weight.shape[0], device=self.weight.device),\
+                       5.0 * torch.ones(self.weight.shape[0], device=self.weight.device)
+
             x = (x - mean.unsqueeze(1)) * inv_std.unsqueeze(1) * r.unsqueeze(1) + d.unsqueeze(1)
             if first:
                 self.num_batches_tracked += 1
+            if self.affine:
+                x = self.weight.unsqueeze(1) * x + self.bias.unsqueeze(1)
         else:
             inv_std = 1/(self.running_std + self.eps).pow(0.5)
-            x = (x - self.running_mean.unsqueeze(1)) * inv_std.unsqueeze(1)
-        if self.affine:
-            x = self.weight.unsqueeze(1) * x + self.bias.unsqueeze(1)
+            x = (x - self.running_mean) * inv_std
+            if self.affine:
+                x = self.weight * x + self.bias
+
 
         return x.view(channels, batchsize).permute(1, 0).contiguous()
 
