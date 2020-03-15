@@ -3,9 +3,10 @@ import os
 import time
 import io
 
+
 class Trainer(object):
 
-    def __init__(self, optimizer, criterion, params_invariant ,args, ):
+    def __init__(self, optimizer, criterion, params_invariant, args, ):
         self._optimizer = optimizer
         self._epoch = 1
         self.args = args
@@ -24,11 +25,11 @@ class Trainer(object):
 
     def save_cktpt(self, model, fn):
         state_dict = {
-            'optimizer_state' : self._optimizer.state_dict(),
-            'epoch' : self._epoch,
-            'model' : model.state_dict(),
-            'validloss' : self.validloss,
-            'testloss' : self.testloss,
+            'optimizer_state': self._optimizer.state_dict(),
+            'epoch': self._epoch,
+            'model': model.state_dict(),
+            'validloss': self.validloss,
+            'testloss': self.testloss,
         }
         torch.save(state_dict, fn)
         print('save checkpint for epoch {}'.format(self._epoch))
@@ -51,10 +52,10 @@ class Trainer(object):
         model.eval()
         total_loss = 0
         true_case = 0
-        total_case =0
+        total_case = 0
         for i, sample in enumerate(loader):
             images, labels = sample
-            images = images.transpose(0, 1) # seq length, bsz, input = 784, 100, 1
+            images = images.transpose(0, 1)  # seq length, bsz, input = 784, 100, 1
             images = images.cuda()
             labels = labels.cuda()
             output = model(images, self._optimizer)
@@ -67,7 +68,7 @@ class Trainer(object):
                 equal_case = torch.eq(argmax, labels)
                 true_case += int(equal_case.float().sum().item())
         if test:
-            return (total_loss / total_case , float(true_case) / total_case)
+            return (total_loss / total_case, float(true_case) / total_case)
         else:
             return total_loss / total_case
 
@@ -92,9 +93,13 @@ class Trainer(object):
             torch.nn.utils.clip_grad_norm_(self.params_invariant, self.args.clip)
 
             self._optimizer.step()
-            if j % 10 == 0 :
+            if j % 10 == 0:
                 elapsed = time.time() - start_time
-                print('{:03d} loss {:8.6f} elaped time {:6.3f}  learning rate {:08.6f}'.format(j * self.args.batchsize, raw_loss.item(), elapsed, self._optimizer.param_groups[0]['lr']))
+                print('{:03d} loss {:8.6f} elaped time {:6.3f}  learning rate {:08.6f} r {:2.2f} d {:2.2f}'.format(j * self.args.batchsize,
+                                                                                               raw_loss.item(), elapsed,
+                                                                                               self._optimizer.param_groups[0]['lr'],
+                                                                                               model.rnns._modules['0']._modules['cell'].bn_h.dmax,
+                                                                                               model.rnns._modules['0']._modules['cell'].bn_h.rmax))
                 start_time = time.time()
         return total_loss / total_cases
 
@@ -105,19 +110,19 @@ class Trainer(object):
             print('| End of epoch {:3d} | acc {:6.3f} | test loss {:6.3f} |'.format(self._epoch - 1, acc,
                                                                                     test_loss, ))
             print('=' * 89)
-        for epoch in range(self._epoch, self.args.epochs+1):
+        for epoch in range(self._epoch, self.args.epochs + 1):
             epoch_start_time = time.time()
             trainloss = self.train_step(model, trainloader)
             val_loss = self.evaluate_step(model, validloader)
             print('-' * 89)
             print('| end of epoch {:3d} | time: {:6.3f}s | valid loss {:6.3f} | '.format(
-              epoch, (time.time() - epoch_start_time), val_loss, ))
+                epoch, (time.time() - epoch_start_time), val_loss, ))
             print('-' * 89)
             # Run on test data.
             test_loss, acc = self.evaluate_step(model, testloader, test=True)
             print('=' * 89)
             print('| End of epoch {:3d} | acc {:6.3f} | test loss {:6.3f} |'.format(epoch, acc,
-                test_loss, ))
+                                                                                    test_loss, ))
             print('=' * 89)
 
             if val_loss < self.validloss:
@@ -127,8 +132,8 @@ class Trainer(object):
             else:
                 is_best = False
             if self.args.optimizer == 'adam':
-                    self._optimizer.param_groups[0]['lr'] *= self.args.lr_decay
-            with io.open(self.args.save +  '.log', 'a', newline='\n', encoding='utf8', errors='ignore') as tgt:
+                self._optimizer.param_groups[0]['lr'] *= self.args.lr_decay
+            with io.open(self.args.save + '.log', 'a', newline='\n', encoding='utf8', errors='ignore') as tgt:
                 msg = 'epoch {:03d} train_loss {:010.7f} valid_loss {:010.7f} test_loss {:010.7f} accuracy {:06.4f}\n'.format(
                     self._epoch, trainloss, val_loss, test_loss, acc
                 )
