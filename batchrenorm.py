@@ -31,7 +31,6 @@ class BatchRenorm(torch.nn.Module):
         self.affine = affine
         self.eps = eps
         self.step = 0
-        self.m = torch.distributions.Bernoulli(torch.tensor([0.1]))
         self.momentum = momentum
 
     def _check_input_dim(self, x: torch.Tensor) -> None:
@@ -39,13 +38,13 @@ class BatchRenorm(torch.nn.Module):
 
     @property
     def rmax(self) -> torch.Tensor:
-        return (2/35000 * self.num_batches_tracked + 25 / 35).clamp_(
+        return (2/(35000*588) * self.num_batches_tracked + 25 / 35).clamp_(
             1.0, 3.0
         )
 
     @property
     def dmax(self) -> torch.Tensor:
-        return (5/20000 * self.num_batches_tracked - 25 / 20).clamp_(
+        return (5/(20000*588) * self.num_batches_tracked - 25 / 20).clamp_(
             0.0, 5.0
         )
 
@@ -58,17 +57,20 @@ class BatchRenorm(torch.nn.Module):
             sum_of_square = x.pow(2).sum(1)
             mean = sum_ / numel
             sumvar = sum_of_square - sum_ * mean
-            self.running_mean = (
-                    (1 - self.momentum) * self.running_mean
-                    + self.momentum * mean.detach())
             unbias_var = sumvar / (numel - 1)
-            self.running_std = (
-                    (1 - self.momentum) * self.running_std
-                    + self.momentum * unbias_var.detach()
-            )
 
             bias_var = sumvar / numel
             inv_std = 1 / (bias_var + self.eps).pow(0.5)
+
+            if not first:
+                self.num_batches_tracked += 1
+                self.running_mean = (
+                    (1 - self.momentum) * self.running_mean
+                    + self.momentum * mean.detach())
+                self.running_std = (
+                    (1 - self.momentum) * self.running_std
+                    + self.momentum * unbias_var.detach())
+
             r = (
                 inv_std.detach() / self.running_std.view_as(inv_std)
             ).clamp_(1 / self.rmax, self.rmax)
@@ -77,13 +79,7 @@ class BatchRenorm(torch.nn.Module):
                 / self.running_std.view_as(inv_std)
             ).clamp_(-self.dmax, self.dmax)
 
-            if self.m.sample():
-                r, d = 3.0 * torch.ones(self.weight.shape[0], device=self.weight.device),\
-                       5.0 * torch.ones(self.weight.shape[0], device=self.weight.device)
-
             x = (x - mean.unsqueeze(1)) * inv_std.unsqueeze(1) * r.unsqueeze(1) + d.unsqueeze(1)
-            if first:
-                self.num_batches_tracked += 1
             if self.affine:
                 x = self.weight.unsqueeze(1) * x + self.bias.unsqueeze(1)
         else:

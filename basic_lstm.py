@@ -59,7 +59,7 @@ class LSTMLayer(nn.Module):
         # inputs = input.unbind(0)
         outputs = []
         for i in range(len(input)):
-            first = i == len(input)-1
+            first = i < 0.25*len(input)
             out, state = self.cell(input[i], state, first)
             outputs += [out]
         return torch.stack(outputs), state
