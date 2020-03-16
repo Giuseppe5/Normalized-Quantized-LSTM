@@ -95,11 +95,9 @@ class Trainer(object):
             self._optimizer.step()
             if j % 10 == 0:
                 elapsed = time.time() - start_time
-                print('{:03d} loss {:8.6f} elaped time {:6.3f}  learning rate {:08.6f} r {:2.2f} d {:2.2f}'.format(j * self.args.batchsize,
+                print('{:03d} loss {:8.6f} elaped time {:6.3f}  learning rate {:08.6f}'.format(j * self.args.batchsize,
                                                                                                raw_loss.item(), elapsed,
-                                                                                               self._optimizer.param_groups[0]['lr'],
-                                                                                               model.rnns._modules['0']._modules['cell'].bn_h.dmax,
-                                                                                               model.rnns._modules['0']._modules['cell'].bn_h.rmax))
+                                                                                               self._optimizer.param_groups[0]['lr']))
                 start_time = time.time()
         return total_loss / total_cases
 

@@ -23,7 +23,7 @@ class BatchRenorm(torch.nn.Module):
             "num_batches_tracked", torch.tensor(0, dtype=torch.long)
         )
         self.weight = torch.nn.Parameter(
-            torch.ones(num_features, dtype=torch.float), requires_grad=True
+            0.1 * torch.ones(num_features, dtype=torch.float), requires_grad=True
         )
         self.bias = torch.nn.Parameter(
             torch.zeros(num_features, dtype=torch.float), requires_grad=True
@@ -38,13 +38,13 @@ class BatchRenorm(torch.nn.Module):
 
     @property
     def rmax(self) -> torch.Tensor:
-        return (2/(35000*588) * self.num_batches_tracked + 25 / 35).clamp_(
+        return (2/(35000) * self.num_batches_tracked + 25 / 35).clamp_(
             1.0, 3.0
         )
 
     @property
     def dmax(self) -> torch.Tensor:
-        return (5/(20000*588) * self.num_batches_tracked - 25 / 20).clamp_(
+        return (5/(20000) * self.num_batches_tracked - 25 / 20).clamp_(
             0.0, 5.0
         )
 
@@ -62,14 +62,12 @@ class BatchRenorm(torch.nn.Module):
             bias_var = sumvar / numel
             inv_std = 1 / (bias_var + self.eps).pow(0.5)
 
-            if not first:
-                self.num_batches_tracked += 1
-                self.running_mean = (
-                    (1 - self.momentum) * self.running_mean
-                    + self.momentum * mean.detach())
-                self.running_std = (
-                    (1 - self.momentum) * self.running_std
-                    + self.momentum * unbias_var.detach())
+            self.running_mean = (
+                (1 - self.momentum) * self.running_mean
+                + self.momentum * mean.detach())
+            self.running_std = (
+                (1 - self.momentum) * self.running_std
+                + self.momentum * unbias_var.detach())
 
             r = (
                 inv_std.detach() / self.running_std.view_as(inv_std)
@@ -80,6 +78,8 @@ class BatchRenorm(torch.nn.Module):
             ).clamp_(-self.dmax, self.dmax)
 
             x = (x - mean.unsqueeze(1)) * inv_std.unsqueeze(1) * r.unsqueeze(1) + d.unsqueeze(1)
+            if first:
+                self.num_batches_tracked += 1
             if self.affine:
                 x = self.weight.unsqueeze(1) * x + self.bias.unsqueeze(1)
         else:
