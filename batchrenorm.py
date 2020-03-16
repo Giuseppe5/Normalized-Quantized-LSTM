@@ -48,7 +48,7 @@ class BatchRenorm(torch.nn.Module):
             0.0, 5.0
         )
 
-    def forward(self, x: torch.Tensor, last: bool) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, first_25: bool, last: bool) -> torch.Tensor:
         batchsize, channels = x.size()
         if self.training:
             numel = batchsize
@@ -61,13 +61,13 @@ class BatchRenorm(torch.nn.Module):
 
             bias_var = sumvar / numel
             inv_std = 1 / (bias_var + self.eps).pow(0.5)
-
-            self.running_mean = (
-                (1 - self.momentum) * self.running_mean
-                + self.momentum * mean.detach())
-            self.running_std = (
-                (1 - self.momentum) * self.running_std
-                + self.momentum * unbias_var.detach())
+            if not first_25:
+                self.running_mean = (
+                    (1 - self.momentum) * self.running_mean
+                    + self.momentum * mean.detach())
+                self.running_std = (
+                    (1 - self.momentum) * self.running_std
+                    + self.momentum * unbias_var.detach())
 
             r = (
                 inv_std.detach() / self.running_std.view_as(inv_std)
