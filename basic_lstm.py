@@ -3,7 +3,7 @@ import torch.nn as nn
 from torch.nn import Parameter
 from typing import List, Tuple
 from torch import Tensor
-from separated_bn import SeparatedBatchNorm1d
+from batchrenorm import BatchRenorm1d
 
 class LSTMCell(nn.Module):
     def __init__(self, input_size, hidden_size):
@@ -21,15 +21,15 @@ class LSTMCell(nn.Module):
         self.bias_ih = Parameter(torch.zeros(4 * hidden_size), requires_grad=True)
         self.bias_hh = Parameter(torch.zeros(4 * hidden_size), requires_grad=True)
 
-        self.bn_i = SeparatedBatchNorm1d(4 * hidden_size, 784)
-        self.bn_h = SeparatedBatchNorm1d(4 * hidden_size, 784)
-        self.bn_c = SeparatedBatchNorm1d(hidden_size, 784)
+        self.bn_i = BatchRenorm1d(4 * hidden_size)
+        self.bn_h = BatchRenorm1d(4 * hidden_size)
+        self.bn_c = BatchRenorm1d(hidden_size)
 
-    def forward(self, input, state, time):
+    def forward(self, input, state, last):
         # type: (Tensor, Tuple[Tensor, Tensor]) -> Tuple[Tensor, Tuple[Tensor, Tensor]]
         hx, cx = state
-        gates = (self.bn_i(torch.mm(input, self.weight_ih.t()), time) + self.bias_ih +
-                 self.bn_h(torch.mm(hx, self.weight_hh.t()), time) + self.bias_hh)
+        gates = (self.bn_i(torch.mm(input, self.weight_ih.t()), last) + self.bias_ih +
+                 self.bn_h(torch.mm(hx, self.weight_hh.t()), last) + self.bias_hh)
         ingate, forgetgate, cellgate, outgate = gates.chunk(4, 1)
 
         ingate = torch.sigmoid(ingate)
@@ -38,7 +38,7 @@ class LSTMCell(nn.Module):
         outgate = torch.sigmoid(outgate)
 
         cy = (forgetgate * cx) + (ingate * cellgate)
-        hy = outgate * torch.tanh(self.bn_c(cy, time))
+        hy = outgate * torch.tanh(self.bn_c(cy, last))
 
         return hy, (hy, cy)
 
@@ -61,7 +61,8 @@ class LSTMLayer(nn.Module):
         # inputs = input.unbind(0)
         outputs = []
         for i in range(len(input)):
-            out, state = self.cell(input[i], state, i)
+            last = i == len(input)-1
+            out, state = self.cell(input[i], state, last)
             outputs += [out]
         return torch.stack(outputs), state
 

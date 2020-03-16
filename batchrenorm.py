@@ -48,7 +48,7 @@ class BatchRenorm(torch.nn.Module):
             0.0, 5.0
         )
 
-    def forward(self, x: torch.Tensor, first: bool) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, last: bool) -> torch.Tensor:
         batchsize, channels = x.size()
         if self.training:
             numel = batchsize
@@ -78,7 +78,7 @@ class BatchRenorm(torch.nn.Module):
             ).clamp_(-self.dmax, self.dmax)
 
             x = (x - mean.unsqueeze(1)) * inv_std.unsqueeze(1) * r.unsqueeze(1) + d.unsqueeze(1)
-            if first:
+            if last:
                 self.num_batches_tracked += 1
             if self.affine:
                 x = self.weight.unsqueeze(1) * x + self.bias.unsqueeze(1)
