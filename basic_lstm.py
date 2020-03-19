@@ -25,11 +25,12 @@ class LSTMCell(nn.Module):
         self.bn_h = BatchRenorm1d(4 * hidden_size)
         self.bn_c = BatchRenorm1d(hidden_size)
 
-    def forward(self, input, state, first_25, last):
+
+    def forward(self, input, state, first):
         # type: (Tensor, Tuple[Tensor, Tensor]) -> Tuple[Tensor, Tuple[Tensor, Tensor]]
         hx, cx = state
-        gates = (self.bn_i(torch.mm(input, self.weight_ih.t()), first_25, last) + self.bias_ih +
-                 self.bn_h(torch.mm(hx, self.weight_hh.t()), first_25, last) + self.bias_hh)
+        gates = (self.bn_i(torch.mm(input, self.weight_ih.t()), first) + self.bias_ih +
+                 self.bn_h(torch.mm(hx, self.weight_hh.t()), first) + self.bias_hh)
         ingate, forgetgate, cellgate, outgate = gates.chunk(4, 1)
 
         ingate = torch.sigmoid(ingate)
@@ -38,7 +39,8 @@ class LSTMCell(nn.Module):
         outgate = torch.sigmoid(outgate)
 
         cy = (forgetgate * cx) + (ingate * cellgate)
-        hy = outgate * torch.tanh(self.bn_c(cy,first_25, last))
+
+        hy = outgate * torch.tanh(self.bn_c(cy, first))
 
         return hy, (hy, cy)
 
@@ -62,8 +64,7 @@ class LSTMLayer(nn.Module):
         outputs = []
         for i in range(len(input)):
             last = i == len(input)-1
-            first_25 = i < 0.25 * len(input)
-            out, state = self.cell(input[i], state, first_25, last)
+            out, state = self.cell(input[i], state, last)
             outputs += [out]
         return torch.stack(outputs), state
 
