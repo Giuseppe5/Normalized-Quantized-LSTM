@@ -5,12 +5,13 @@ from typing import List, Tuple
 from torch import Tensor
 from batchrenorm import BatchRenorm1d
 
+
 class LSTMCell(nn.Module):
     def __init__(self, input_size, hidden_size):
         super(LSTMCell, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
-        temp = torch.empty(4*hidden_size, input_size)
+        temp = torch.empty(4 * hidden_size, input_size)
         torch.nn.init.orthogonal_(temp)
         self.weight_ih = Parameter(temp, requires_grad=True)
 
@@ -24,7 +25,6 @@ class LSTMCell(nn.Module):
         self.bn_i = BatchRenorm1d(4 * hidden_size)
         self.bn_h = BatchRenorm1d(4 * hidden_size)
         self.bn_c = BatchRenorm1d(hidden_size)
-
 
     def forward(self, input, state, first):
         # type: (Tensor, Tuple[Tensor, Tensor]) -> Tuple[Tensor, Tuple[Tensor, Tensor]]
@@ -57,13 +57,19 @@ class LSTMLayer(nn.Module):
 
         # h, c = 0.1*torch.randn((input.shape[1], self.cell.hidden_size)), 0.1*torch.randn((input.shape[1], self.cell.hidden_size))
         h, c = (
-        self.h0.repeat(input.shape[1], 1) + self.h0.data.new(input.shape[1], self.cell.hidden_size).normal_(0, 0.10),
-        self.c0.repeat(input.shape[1], 1) + self.c0.data.new(input.shape[1], self.cell.hidden_size).normal_(0, 0.10))
+            self.h0.repeat(input.shape[1], 1) + self.h0.data.new(input.shape[1], self.cell.hidden_size).normal_(0,
+                                                                                                                0.10),
+            self.c0.repeat(input.shape[1], 1) + self.c0.data.new(input.shape[1], self.cell.hidden_size).normal_(0,
+                                                                                                                0.10))
         state = (h, c)
+        self.cell.bn_i.num_batches_tracked = torch.tensor(0)
+        self.cell.bn_h.num_batches_tracked = torch.tensor(0)
+        self.cell.bn_c.num_batches_tracked = torch.tensor(0)
+
         # inputs = input.unbind(0)
         outputs = []
         for i in range(len(input)):
-            last = i == len(input)-1
+            last = i == len(input) - 1
             out, state = self.cell(input[i], state, last)
             outputs += [out]
         return torch.stack(outputs), state

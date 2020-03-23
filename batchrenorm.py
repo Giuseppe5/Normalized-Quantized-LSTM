@@ -13,14 +13,20 @@ class BatchRenorm(torch.nn.Module):
         affine: bool = True,
     ):
         super().__init__()
-        # self.register_buffer(
-        #     "running_mean", torch.zeros(num_features, dtype=torch.float)
-        # )
-        # self.register_buffer(
-        #     "running_std", torch.ones(num_features, dtype=torch.float)
-        # )
-        self.running_mean = torch.nn.Parameter(torch.zeros(num_features), requires_grad=True)
-        self.running_var = torch.nn.Parameter(torch.ones(num_features), requires_grad=True)
+        self.register_buffer(
+            "running_mean", torch.zeros(num_features, dtype=torch.float)
+        )
+        self.register_buffer(
+            "running_var", torch.ones(num_features, dtype=torch.float)
+        )
+
+        self.register_buffer(
+            "running_mean_global", torch.zeros(num_features, dtype=torch.float)
+        )
+        self.register_buffer(
+            "running_var_global", torch.ones(num_features, dtype=torch.float)
+        )
+
         self.register_buffer(
             "num_batches_tracked", torch.tensor(0, dtype=torch.long)
         )
@@ -40,26 +46,19 @@ class BatchRenorm(torch.nn.Module):
 
     @property
     def rmax(self) -> torch.Tensor:
-        return (2 / 35000 * self.num_batches_tracked + 25 / 35).clamp_(
+        return (3 / 500 * self.num_batches_tracked).clamp_(
             1.0, 3.0
         )
 
     @property
     def dmax(self) -> torch.Tensor:
-        return (5 / 20000 * self.num_batches_tracked - 25 / 20).clamp_(
+        return (5 / 500 * self.num_batches_tracked - 1).clamp_(
             0.0, 5.0
         )
 
     def forward(self, x: torch.Tensor, last: bool) -> torch.Tensor:
         batchsize, channels = x.size()
         numel = batchsize
-        # if self.training:
-            # self.running_mean = (
-            #     (1 - self.momentum) * self.running_mean
-            #     + self.momentum * mean.detach())
-            # self.running_var = (
-            #     (1 - self.momentum) * self.running_var
-            #     + self.momentum * unbias_var.detach())
 
         x = x.permute(1, 0).contiguous().view(channels, numel)
         sum_ = x.sum(1)
@@ -70,33 +69,23 @@ class BatchRenorm(torch.nn.Module):
 
         bias_var = sumvar / numel
         inv_std = 1 / (bias_var + self.eps).pow(0.5)
-        if self.rmax < 3.0 and self.dmax < 5.0:
-            if self.training:
-                self.running_mean.data.mul_(1-self.momentum)
-                self.running_mean.data.add_(self.momentum * mean.detach())
-                self.running_var.data.mul_(1-self.momentum)
-                self.running_var.data.add_(self.momentum * unbias_var.detach())
-                if last:
-                    self.num_batches_tracked += 1
+        if self.training:
+            self.running_mean = self.running_mean*(1-self.momentum) + self.momentum * mean.detach()
+            self.running_var = self.running_var * (1-self.momentum) + self.momentum * unbias_var.detach()
+            self.num_batches_tracked += 1
+            if last:
+                self.running_mean_global = self.running_mean_global*(1-self.momentum) + self.momentum * self.running_mean.detach()
+                self.running_var_global = self.running_var_global*(1-self.momentum) + self.momentum * self.running_var.detach()
+
             r = (inv_std.detach() / self.running_var.view_as(inv_std)).clamp_(1 / self.rmax, self.rmax)
             d = ((mean.detach() - self.running_mean.view_as(mean)) / self.running_var.view_as(inv_std)).clamp_(-self.dmax, self.dmax)
-            # else:
-            #     x = (x - mean) * inv_std
-            #     if self.affine:
-            #         x = self.weight * x + self.bias
             x = (x - mean.unsqueeze(1)) * inv_std.unsqueeze(1)* r.unsqueeze(1) + d.unsqueeze(1)
-            if self.affine:
-                x = self.weight.unsqueeze(1) * x + self.bias.unsqueeze(1)
+
         else:
-            inv_std = 1/(self.running_var+self.eps).pow(0.5)
-            x = (x-self.running_mean.unsqueeze(1)) * inv_std.unsqueeze(1)
-            if self.affine:
-                x = self.weight.unsqueeze(1) * x + self.bias.unsqueeze(1)
-            # if self.training:
-            # else:
-            #     x = (x-self.running_mean) * inv_std
-            #     if self.affine:
-            #         x = x * self.weight + self.bias
+            inv_std = 1/(self.running_var_global+self.eps).pow(0.5)
+            x = (x - self.running_mean_global.unsqueeze(1)) * inv_std.unsqueeze(1)
+
+        x = self.weight.unsqueeze(1) * x + self.bias.unsqueeze(1)
 
         return x.view(channels, batchsize).permute(1, 0).contiguous()
 
